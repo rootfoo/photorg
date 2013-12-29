@@ -59,7 +59,9 @@ xmp_template = """<?xpacket begin="<feff>" id="W5M0MpCehiHzreSzNTczkc9d"?>
 class MetadataError(Exception):
 	pass
 
-	
+
+class FileCollisionError(Exception):
+	pass
 
 	
 class ImageMetadata(object):
@@ -203,13 +205,12 @@ def copy_file(source, target, target_is_dir=False):
 					target_hash = hashlib.sha1(target_file.read()).hexdigest()
 					if source_hash != target_hash:
 						# file exists but has different hash
-						sys.stderr.write('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
-						return
+						raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
 
 		else:
 			# target file exists but is a different size
-			sys.stderr.write('Destination file exists and is different size: {src}, {dest}\n'.format(src=source, dest=target_path))
-			return
+			raise FileCollisionError('Destination file exists and is different size: {src}, {dest}\n'.format(src=source, dest=target_path))
+
 
 	# file did not already exist
 	else:
@@ -225,9 +226,36 @@ def copy_file(source, target, target_is_dir=False):
 			copyfile(source, target_path)
 
 
+def get_unique_filename(path):
+	"""find a unique filename based on the path such that the file does not already exist"""
+	dirname = os.path.dirname(path)
+	name,ext = os.path.splitext(os.path.basename(path))
+	counter = 1
+	name_base = name
+
+	# start counter at value in current filename if any
+	name_split = name.rsplit('-',1)
+	if len(name_split) == 2:
+		try:
+			counter = int(name_split[1])
+			name_base = name_split[0]
+			
+		except ValueError as e:
+			pass
+		
+	# now iterate until a usable name is found
+	for i in range(counter, counter+255):
+		new_name = "{b}-{c}{e}".format(b=name_base, c=str(counter), e=ext)
+		new_path = os.path.join(dirname, new_name)
+		if not os.path.exists(new_path):
+			return new_path
+
+	else:
+		raise Exception('Error: could not find unique filename')
 
 
-def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None): 
+
+def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None): 
 	
 	# locals
 	event_date = None
@@ -235,8 +263,7 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None):
 	dest = os.path.realpath(dest_dir)
 	source = os.path.realpath(source_dir)
 	metadata_list = []
-	other_list = []
-	dir_to_metadata = {} # {directory, [img_metadata]}
+	alternate_list = []
 
 	# walk the source directory and separate photos (with metadata) from everything else
 	for path in ls(source):
@@ -246,19 +273,20 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None):
 			imd = ImageMetadata(path)
 			date = imd['Exif.Image.DateTime']
 			metadata_list.append(imd)
-			# update the Dir->ImageMetadata map
-			dir_to_metadata.setdefault(os.path.dirname(imd.path), []).append(imd)
 
 		except MetadataError as e:
 			# This was not an image (or did not have a date attribute)
-			other_list.append(path)
+			alternate_list.append(path)
 	
 		except KeyError as e:
-			sys.stderr.write(str(e) + ": " + path + "\n")
+			# metadata loaded but date was not set
+			#sys.stderr.write(e.message + ": " + path + "\n")
+			alternate_list.append(path)
 
 	# update progress counters
-	total_count = len(metadata_list) + len(other_list)
+	total_count = len(metadata_list) + len(alternate_list)
 	current_count = 0
+	# FIXME: print progress
 
 	# iterate over all ImageMetadata objects sorted by Exif.Image.DateTime
 	for metadata in sorted(metadata_list, key=lambda md: md['Exif.Image.DateTime']):
@@ -277,42 +305,47 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None):
 			event_dir = new_event_dir(dest, event_date)
 			#print "="*3, label + " / " + str(delta.days), "="*3
 		
-		# copy file to event_dir
-		copy_file(metadata.path, event_dir, target_is_dir=True)
+		# copy file to event_dir 
+		target_path = os.path.join(event_dir, os.path.basename(metadata.path))
+		try:
+			copy_file(metadata.path, target_path)
+		
+		# if there is a collision, choose a different name in the event dir and try again
+		except FileCollisionError as e:
+			renamed_path = get_unique_filename(target_path)
+			copy_file(metadata.path, renamed_path)
 
 		# update progress
 		current_count += 1
 		# FIXME: print progress
 
 	# now deal with the non-images and other files without metadata
-	for path in other_list:
-		# if there were any images in the same directory as this file, use them to determine nearest event
-		# dirname = os.path.dirname(path)
-		# FIXME, logic is not quite right, all non-image files will get coppied this way
-		#if dirname in dir_to_metadata:
-			# sort all the metadata objecst in the same directory as this file by the hamming distance between paths
-			#metadata_in_same_dir = dir_to_metadata[dirname]
-			#imd = sorted(metadata_in_same_dir, key=lambda imd: path_distance(path, imd.path))[0]
-			# put this file in the same event directory 
-			#event_dir = new_event_dir(dest, imd['Exif.Image.DateTime'])
-			#print "Copying non-image file: ", path, " -> ", event_dir
-			#print "    Closest image path: ", imd.path
-			#print "         Path distance: ", str(path_distance(path, imd.path))
-			#copy_file(path, event_dir)
+	for path in alternate_list:
 
 		# if the user specified an alternate directory for non-image files
-		if other_dir:
+		if alternate_dir:
 			# preserve the directory structure as a subdirectory 
 			prefix = os.path.commonprefix([path, source])
 			subpath = path.replace(prefix,'',1).strip(os.path.sep)
-			target = os.path.join(other_dir, subpath) 
+			target = os.path.join(alternate_dir, subpath) 
 			#sys.stderr.write('Copying non-image file to alternate directory: ' + path + '\t' + target  + '\n') 
-			copy_file(path, target)
+			
+			# copy the file to "unorganized" directory
+			try:
+				copy_file(path, target)
+
+			# handle file collisions by choosing a different filename
+			except FileCollisionError as e:
+				renamed_path = get_unique_filename(target)
+				copy_file(path, renamed_target)
+
 		
 		else:
 			# there were no image metadata objects in the same directory as this path
 			sys.stderr.write('Skipping non-image file: ' + path + '\n')
 
+		# update progress
+		current_count += 1
 
 
 def path_distance(x,y):
@@ -356,7 +389,7 @@ if __name__=='__main__':
 
 	parser = argparse.ArgumentParser(description='Photo organization')
 	parser.add_argument('--organize', metavar=('SOURCE','DEST'), nargs=2, help='organize the photos')
-	parser.add_argument('--other', help='directory to copy non-image and other unsupported files')
+	parser.add_argument('--alternate', help='alternate directory to copy files that could not be organized [default DEST/unorganized]')
 	parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events.')
 	parser.add_argument('--show', metavar='IMG', help='show metadata for given image file')
 	parser.add_argument('--verbose', action='store_const', const=True, help='display verbose file operations and other info')
@@ -373,8 +406,8 @@ if __name__=='__main__':
 	# organize and copy files from SOURCE into DEST
 	if args.organize:
 		source,dest = args.organize
-		other = args.other if args.other else os.path.join(dest,'photorg_other_files')
-		organize_by_event(source, dest, args.gap, other)
+		alternate = args.alternate if args.alternate else os.path.join(dest, 'unorganized')
+		organize_by_event(source, dest, args.gap, alternate) 
 
 	# help
 	else:
