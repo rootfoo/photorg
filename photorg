@@ -287,19 +287,22 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 		
 		try:
 			# create a metadata object and check for the date key
+			# images with metadata valid date attribute set go into metadata_list
+			# everything else goes in the alternate_list
 			imd = ImageMetadata(path)
 			date = imd['Exif.Image.DateTime']
-			if type(date) != datetime:
-				sys.stderr.write('Exif.Image.DateTime did not return datetime object: [{d}] {p}\n'.format(d=repr(date), p=path))
+			assert(type(date) == datetime)
 			metadata_list.append(imd)
 
-		except MetadataError as e:
-			# This was not an image (or did not have a date attribute)
+		except AssertionError as e:
+			sys.stderr.write('Exif.Image.DateTime did not return datetime object: [{d}] {p}\n'.format(d=repr(date), p=path))
 			alternate_list.append(path)
-	
+
 		except KeyError as e:
-			# metadata loaded but date was not set
-			#sys.stderr.write(e.message + ": " + path + "\n")
+			sys.stderr.write('Exif.Image.DateTime attribute not set: {p}\n'.format(d=repr(date), p=path))
+			alternate_list.append(path)
+
+		except MetadataError as e:
 			alternate_list.append(path)
 
 	# update progress counters
