@@ -199,13 +199,9 @@ def copy_file(source, target, target_is_dir=False):
 		elif os.stat(source).st_size == os.stat(target_path).st_size:
 			
 			# check if they are the same hash
-			with open(source) as source_file:
-				with open(target_path) as target_file:
-					source_hash = hashlib.sha1(source_file.read()).hexdigest()
-					target_hash = hashlib.sha1(target_file.read()).hexdigest()
-					if source_hash != target_hash:
-						# file exists but has different hash
-						raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
+			if sha1sum(source) != sha1sum(target_path):
+				# file exists but has different hash
+				raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
 
 		else:
 			# target file exists but is a different size
@@ -226,12 +222,30 @@ def copy_file(source, target, target_is_dir=False):
 			copyfile(source, target_path)
 
 
+def sha1sum(path):
+	with open(path) as f:
+		return hashlib.sha1(f.read()).hexdigest()
+		
+
+def is_duplicate_file(source, directory):
+	"""check for any files in the target directory with the same hash as the source file"""
+	source_hash = sha1sum(source)
+	for path in ls(directory):
+		if sha1sum(path) == source_hash:
+			return True
+	return False
+
+
 def get_unique_filename(path):
-	"""find a unique filename based on the path such that the file does not already exist"""
+	"""
+	find a unique filename based on the path such that the file does not already exist.
+	In order to be idempotent, make sure existing files are actually different.
+	"""
 	dirname = os.path.dirname(path)
 	name,ext = os.path.splitext(os.path.basename(path))
 	counter = 1
 	name_base = name
+	path_hash = None
 
 	# start counter at value in current filename if any
 	name_split = name.rsplit('-',1)
@@ -245,7 +259,7 @@ def get_unique_filename(path):
 		
 	# now iterate until a usable name is found
 	for i in range(counter, counter+255):
-		new_name = "{b}-{c}{e}".format(b=name_base, c=str(counter), e=ext)
+		new_name = "{b}-{c}{e}".format(b=name_base, c=str(i), e=ext)
 		new_path = os.path.join(dirname, new_name)
 		if not os.path.exists(new_path):
 			return new_path
@@ -312,8 +326,10 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 		
 		# if there is a collision, choose a different name in the event dir and try again
 		except FileCollisionError as e:
-			renamed_path = get_unique_filename(target_path)
-			copy_file(metadata.path, renamed_path)
+			# but first make sure we didn't already do this once
+			if not is_duplicate_file(metadata.path, event_dir):
+				renamed_path = get_unique_filename(target_path)
+				copy_file(metadata.path, renamed_path)
 
 		# update progress
 		current_count += 1
@@ -336,8 +352,10 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 
 			# handle file collisions by choosing a different filename
 			except FileCollisionError as e:
-				renamed_path = get_unique_filename(target)
-				copy_file(path, renamed_target)
+				# first check that we didnt already do this once
+				if not is_duplicate_file(path, os.path.dirname(target)):
+					renamed_path = get_unique_filename(target)
+					copy_file(path, renamed_target)
 
 		
 		else:
