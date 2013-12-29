@@ -305,7 +305,7 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 	# update progress counters
 	total_count = len(metadata_list) + len(alternate_list)
 	current_count = 0
-	print "{t} files of which {m} have metadata and {u} will not be organized".format(t=total_count, m=len(metadata_list), t=len(alternate_list))
+	print "{t} files of which {m} have metadata and {u} will not be organized".format(t=total_count, m=len(metadata_list), u=len(alternate_list))
 	# FIXME: print progress
 
 	# iterate over all ImageMetadata objects sorted by Exif.Image.DateTime
