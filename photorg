@@ -62,58 +62,56 @@ class MetadataError(Exception):
 	
 
 	
-class ImageData(object):
+class ImageMetadata(object):
 
 	def __init__(self, path):
 		# try to read image and xmp metadata
 		# create xmp if it does not exist
 		# raise error if either fail
-		self._get_xmp(path)
+		self.path = path.rstrip('.xmp') # this may not be necessary / errors could be handled in other ways
+		self._load_metadata()
+		self._load_sidecar()
 
-
-	def _get_xmp(self, path):
+	def _load_metadata(self):
 		"""
 		given a path to an image or an xmp file, return a Metadata object
 		Metadata objects provide coordinated access to metdata in either xmp or image files
 		saving 
 		"""
-		img_path = path.rstrip('.xmp')
-		sidecar_path = img_path + '.xmp'
 
 		# try to open the image file, throw exception if DNE
 		try:
-			img_metadata = pyexiv2.ImageMetadata(img_path)
-			img_metadata.read()
-
-			self._img_metadata = img_metadata
-			self._img_path = img_path
+			self._img_metadata = pyexiv2.ImageMetadata(self.path)
+			self._img_metadata.read()
 
 		except Exception as e:
 			raise MetadataError(e.message)
+
+
+	def _load_sidecar(self, create=False):
+	
+		self.sidecar_path = self.path + '.xmp'
+		
+		# try to open xmp file if it exists
+		if os.path.exists(self.sidecar_path):
+			try:
+				self._xmp_metadata = pyexiv2.ImageMetadata(self.sidecar_path)
+				self._xmp_metadata.read()
+
+			except Exception as e:
+				raise MetadataError(e.message)
 
 		# if xmp file DNE, create it
-		if not os.path.exists(sidecar_path):
-			with open(sidecar_path,'w') as f:
+		elif create:
+			with open(self.sidecar_path,'w') as f:
 				f.write(xmp_template)
 
-		# try to open xmp file
-		try:
-			xmp_metadata = pyexiv2.ImageMetadata(sidecar_path)
-			xmp_metadata.read()
 
-			self._sidecar_path = sidecar_path
-			self._xmp_metadata = xmp_metadata
-
-		except Exception as e:
-			raise MetadataError(e.message)
-		
-		# now xmp and image metadata objects initialized
-	
 
 	def __getitem__(self, key):
 		
 		# first check the xmp source
-		if key in self._xmp_metadata:
+		if hasattr(self, '_xmp_metadata') and key in self._xmp_metadata:
 			return self._xmp_metadata[key].value
 
 		# then check the image source
@@ -122,7 +120,7 @@ class ImageData(object):
 
 		# Tag is either not set or name is invalid - either way it's not set
 		else:
-			raise KeyError('Tag not set')
+			raise KeyError('Tag not set ({key})'.format(key=key))
 		
 
 	def __setitem__(self, key, value):
@@ -131,7 +129,7 @@ class ImageData(object):
 
 
 
-def walk(path, visitor=None, include_hidden=False):
+def ls(path, include_hidden=False):
 	"""
 	walk the filesystem
 	return list of paths rooted at path
@@ -146,90 +144,85 @@ def walk(path, visitor=None, include_hidden=False):
 			if not include_hidden and name.startswith('.'):
 				continue
 	
-			current = os.path.join(root, name)
-			if visitor:
-				result = visitor(current)
-				if result:
-					yield (current, result)
+			yield os.path.join(root, name)
 			
-			else:
-				yield current
-			
-
-
-def get_exif_date(path):
-	# ignore XMP sidecar files (for now)
-	if not path.lower().endswith('.xmp'):
-		try:
-			# get exif datetime
-			metadata = pyexiv2.ImageMetadata(path)
-			metadata.read()
-			date = metadata['Exif.Image.DateTime'].value
-			return date
-
-		except IOError as e:
-			sys.stderr.write('Ignoring non-image file: ' + path + '\n')
-			return None
-
-		except KeyError as e:
-			sys.stderr.write(str(e) + ': ' + path + '\n')
-			return None
-
 
 def new_event_dir(base, date):
 	event_dir = os.path.join(base, date.strftime("%Y-%m-%d"))
 	if not os.path.exists(event_dir):
-		os.mkdir(event_dir, 0755)
+		os.makedirs(event_dir, 0755)
 		print "New Event:", event_dir
 	return event_dir
 
 
-def copy_file(source_path, target_dir):
+
+def copy_file(source, target, target_is_dir=False):
 	"""
 	Copy source file to target directory. 
 	On unix, first try to hard-link. If that fails, perform regular copy.
-	target_dir is not a path to the new file - it does not include the filename.
-	"""
-	fname = os.path.split(source_path)[-1]
-	target_path = os.path.join(target_dir, fname)
 	
-	# skip if the source and dest file both exist and are the same inode
+	source := file to copy
+	target := destination path 
+	target_is_dir := copy the source file to the target directory and perserve filename
+
+	"""
+
+	# first make sure that the source path exists:
+	if not os.path.isfile(source):
+		raise Exception('File does not exist (or is not a regular file): ' + source)
+
+	# target could be a file or directory, expand path as appropriate
+	if target_is_dir:
+		target_dir = target
+		target_path = os.path.join(target, os.path.basename(source))
+
+	else: 
+		target_dir = os.path.dirname(target)
+		target_path = target
+
+	# create directory if it doesn't exist
+	if not os.path.isdir(target_dir):
+		# if this raises an exception then something is actually wrong
+		# probably target_is_dir was used incorrectly
+		os.makedirs(target_dir, 0755)
+
+	# if the target file already exists, check if the it's different
 	if os.path.exists(target_path):
-		source_stat = os.stat(source_path)
-		target_stat = os.stat(target_path)
 		
-		# check if they have the same inode
-		if source_stat.st_ino == target_stat.st_ino:
+		if os.path.samefile(source, target_path):
 			# files are the same inode, can safely skip
 			return
 
-		# check if they have the same size
-		elif source_stat.st_size == target_stat.st_size:
+		# check if they have the same size but different hash
+		elif os.stat(source).st_size == os.stat(target_path).st_size:
 			
 			# check if they are the same hash
-			with open(source_path) as source_file:
+			with open(source) as source_file:
 				with open(target_path) as target_file:
-					source_hash = hashlib.sha1(source_file.read()).digest()
-					target_hash = hashlib.sha1(target_file.read()).digest()
-					if source_hash == target_hash:
-						# same file, can safely skip
-						return None
-					else:
-						sys.stderr.write('Destination file differs: {src}, {dest}\n'.format(src=source_path, dest=target_path))
-						return None
-		else:
-			sys.stderr.write('Destination file differs: {src}, {dest}\n'.format(src=source_path, dest=target_path))
-			return None
+					source_hash = hashlib.sha1(source_file.read()).hexdigest()
+					target_hash = hashlib.sha1(target_file.read()).hexdigest()
+					if source_hash != target_hash:
+						# file exists but has different hash
+						sys.stderr.write('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
+						return
 
-	# file does not already exist
+		else:
+			# target file exists but is a different size
+			sys.stderr.write('Destination file exists and is different size: {src}, {dest}\n'.format(src=source, dest=target_path))
+			return
+
+	# file did not already exist
 	else:
 
-		# otherwise, create a hardlink on unix
+		# create a hardlink on unix
 		try:
-			os.link(source_path, target_path)
+			os.link(source, target_path)
+			if VERBOSE: print "Linking: {s} -> {t}".format(s=source, t=target_path)
+		
+		# otherwise, copy the file
 		except OSError as e:
-			# else copy the file
-			copyfile(source_path, target_path)
+			if VERBOSE: print "Copying: {s} -> {t}".format(s=source, t=target_path)
+			copyfile(source, target_path)
 
 
 
@@ -241,20 +234,42 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None):
 	event_dir = None
 	dest = os.path.realpath(dest_dir)
 	source = os.path.realpath(source_dir)
-	
-	# if output dir specified, mkdir if it doesn't exist
-	if not os.path.exists(dest):
-		os.mkdir(dest, 0755)
+	metadata_list = []
+	other_list = []
+	dir_to_metadata = {} # {directory, [img_metadata]}
 
-	# sort every image file by DateTime exif data and iterate over list of (path,date) tuples
-	for path,date in sorted(walk(source, visitor=get_exif_date), key=lambda pd: pd[1]):
+	# walk the source directory and separate photos (with metadata) from everything else
+	for path in ls(source):
+		
+		try:
+			# create a metadata object and check for the date key
+			imd = ImageMetadata(path)
+			date = imd['Exif.Image.DateTime']
+			metadata_list.append(imd)
+			# update the Dir->ImageMetadata map
+			dir_to_metadata.setdefault(os.path.dirname(imd.path), []).append(imd)
+
+		except MetadataError as e:
+			# This was not an image (or did not have a date attribute)
+			other_list.append(path)
 	
+		except KeyError as e:
+			sys.stderr.write(str(e) + ": " + path + "\n")
+
+	# update progress counters
+	total_count = len(metadata_list) + len(other_list)
+	current_count = 0
+
+	# iterate over all ImageMetadata objects sorted by Exif.Image.DateTime
+	for metadata in sorted(metadata_list, key=lambda md: md['Exif.Image.DateTime']):
+		date = metadata['Exif.Image.DateTime']
+
 		# first iteration: initialize date and create event dir
 		if not event_date: 
 			event_date = date
 			event_dir = new_event_dir(dest, event_date)
 		
-		# decide if time delta is large enough to be a different event
+		# decide if time delta is large enough to start a new event
 		delta = date - event_date 
 		if delta.days > day_delta:
 			# new event, create event directory 
@@ -262,9 +277,47 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, other_dir=None):
 			event_dir = new_event_dir(dest, event_date)
 			#print "="*3, label + " / " + str(delta.days), "="*3
 		
-		# copy files from source to dest/event_dir
-		copy_file(path, event_dir)
+		# copy file to event_dir
+		copy_file(metadata.path, event_dir, target_is_dir=True)
+
+		# update progress
+		current_count += 1
+		# FIXME: print progress
+
+	# now deal with the non-images and other files without metadata
+	for path in other_list:
+		# if there were any images in the same directory as this file, use them to determine nearest event
+		# dirname = os.path.dirname(path)
+		# FIXME, logic is not quite right, all non-image files will get coppied this way
+		#if dirname in dir_to_metadata:
+			# sort all the metadata objecst in the same directory as this file by the hamming distance between paths
+			#metadata_in_same_dir = dir_to_metadata[dirname]
+			#imd = sorted(metadata_in_same_dir, key=lambda imd: path_distance(path, imd.path))[0]
+			# put this file in the same event directory 
+			#event_dir = new_event_dir(dest, imd['Exif.Image.DateTime'])
+			#print "Copying non-image file: ", path, " -> ", event_dir
+			#print "    Closest image path: ", imd.path
+			#print "         Path distance: ", str(path_distance(path, imd.path))
+			#copy_file(path, event_dir)
+
+		# if the user specified an alternate directory for non-image files
+		if other_dir:
+			# preserve the directory structure as a subdirectory 
+			prefix = os.path.commonprefix([path, source])
+			subpath = path.replace(prefix,'',1).strip(os.path.sep)
+			target = os.path.join(other_dir, subpath) 
+			#sys.stderr.write('Copying non-image file to alternate directory: ' + path + '\t' + target  + '\n') 
+			copy_file(path, target)
 		
+		else:
+			# there were no image metadata objects in the same directory as this path
+			sys.stderr.write('Skipping non-image file: ' + path + '\n')
+
+
+
+def path_distance(x,y):
+	"""Calculate the number of trailing characters that are not equal between two strings."""
+	return len(x.lstrip(y))
 
 
 
@@ -302,23 +355,29 @@ def print_exiv2_metadata(path):
 if __name__=='__main__':
 
 	parser = argparse.ArgumentParser(description='Photo organization')
-	#parser.add_argument('source', metavar='SOURCE', help='the directory of photos to scan')
-	#parser.add_argument('dest', metavar='DEST', help='output directory')
 	parser.add_argument('--organize', metavar=('SOURCE','DEST'), nargs=2, help='organize the photos')
 	parser.add_argument('--other', help='directory to copy non-image and other unsupported files')
-	parser.add_argument('--days', type=int, default=4, help='delta in days')
+	parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events.')
 	parser.add_argument('--show', metavar='IMG', help='show metadata for given image file')
+	parser.add_argument('--verbose', action='store_const', const=True, help='display verbose file operations and other info')
 	args = parser.parse_args()
+	
+	# set verbose flag
+	global VERBOSE
+	VERBOSE = args.verbose if args.verbose else False
 
 	# print EXIF data for an image
 	if args.show:
 		print_exiv2_metadata(args.show)
 
 	# organize and copy files from SOURCE into DEST
-	elif args.organize:
+	if args.organize:
 		source,dest = args.organize
-		organize_by_event(source, dest, args.days, args.other)
+		other = args.other if args.other else os.path.join(dest,'photorg_other_files')
+		organize_by_event(source, dest, args.gap, other)
 
+	# help
 	else:
 		parser.print_usage()
+
 
