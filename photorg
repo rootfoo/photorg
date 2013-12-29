@@ -294,17 +294,18 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 			assert(type(date) == datetime)
 			metadata_list.append(imd)
 
-		except AssertionError as e:
-			sys.stderr.write('Exif.Image.DateTime did not return datetime object: [{d}] {p}\n'.format(d=repr(date), p=path))
-			alternate_list.append(path)
-
-		except KeyError as e:
-			sys.stderr.write('Exif.Image.DateTime attribute not set: {p}\n'.format(d=repr(date), p=path))
-			alternate_list.append(path)
-
 		except MetadataError as e:
 			alternate_list.append(path)
 
+		except KeyError as e:
+			sys.stderr.write('Exif.Image.DateTime attribute not set: {p}\n'.format(p=path))
+			alternate_list.append(path)
+
+		except AssertionError as e:
+			sys.stderr.write('Exif.Image.DateTime did not return datetime object: [{d}] {p}\n'.format(d=repr(date), p=path))
+			alternate_list.append(path)
+	
+	
 	# update progress counters
 	total_count = len(metadata_list) + len(alternate_list)
 	current_count = 0
