@@ -136,6 +136,8 @@ def ls(path, include_hidden=False):
 	walk the filesystem
 	return list of paths rooted at path
 	if visitor is specified, return (path, visitor(path)) unless visitor(path) is None 
+	
+	TODO: implement recursive=bool option
 	"""
 	pathlist = []
 	path = os.path.realpath(path)
@@ -402,6 +404,20 @@ def print_exiv2_metadata(path):
 		print tag.key.rjust(45) + ': ' + value
 
 
+def prune_duplicates(directory):
+	hashmap = {}
+	for path in ls(directory):
+		hashmap.setdefault(sha1sum(path),[]).append(path)
+	
+	for key,paths in hashmap.iteritems():
+		if len(paths) > 1:
+			# there are duplicate files, remove all but first
+			sys.stderr.write('Keeping  ({h}): {f}\n'.format(f=paths[0], h=key))
+			for p in paths[1:]:
+				sys.stderr.write('Removing ({h}): {f}\n'.format(f=p, h=key))
+				os.unlink(p)
+
+
 
 if __name__=='__main__':
 
@@ -411,6 +427,7 @@ if __name__=='__main__':
 	parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events.')
 	parser.add_argument('--show', metavar='IMG', help='show metadata for given image file')
 	parser.add_argument('--verbose', action='store_const', const=True, help='display verbose file operations and other info')
+	parser.add_argument('--prune-duplicates', metavar=('DIR',), nargs=1, help='find and remove all duplicate files from the specified directory')
 	args = parser.parse_args()
 	
 	# set verbose flag
@@ -427,6 +444,11 @@ if __name__=='__main__':
 		alternate = args.alternate if args.alternate else os.path.join(dest, 'unorganized')
 		organize_by_event(source, dest, args.gap, alternate) 
 
+	elif args.prune_duplicates:
+		target = args.prune_duplicates[0]
+		print "Finding and removing duplicate files from ", target
+		prune_duplicates(target)
+	
 	# help
 	else:
 		parser.print_usage()
