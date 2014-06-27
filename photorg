@@ -381,7 +381,7 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, alternate_dir=None):
 				# first check that we didnt already do this once
 				if not is_duplicate_file(path, os.path.dirname(target)):
 					renamed_path = get_unique_filename(target)
-					copy_file(path, renamed_target)
+					copy_file(path, renamed_path)
 
 		
 		else:
