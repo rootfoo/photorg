@@ -1,0 +1,169 @@
+#!/usr/bin/python
+
+import sys
+from subprocess import Popen, PIPE
+import argparse
+import os
+
+"""
+use find to hash a directories contents
+
+	find ./SRC -type f -exec sha1sum {} \; >> SRC.sums
+
+
+Let:
+	S = source dir file hashes
+	D = destination dir file hashes
+
+Then:
+	S - D == new or modified files
+	D - S == deleted files
+	S intersect D == files that either havent changed or simply moved
+
+modified files have the same path but different hash
+moved files have the same hash but different paths
+
+
+compare path sets
+	A - B 
+		new paths
+	B - A
+		removed paths
+	A isect B
+		diff hash --> modified
+		same hash --> no change
+	
+"""
+
+
+
+def ddiff(src_sums, dest_sums, src_dir='', dest_dir=''):
+
+	moved = set()
+	modified = set()
+	new = set()
+	removed = set()
+	dest_hash_dict = {} # {hash:path}
+	dest_path_dict = {} # {path:hash}
+	
+	# parse dest_sums into data structures
+	for line in dest_sums:
+		# split on first space to preserve filenames with spaces
+		key,path = line.split(' ',1) 
+		dest_hash_dict.setdefault(key,[]).append(path)
+		dest_path_dict.setdefault(path,[]).append(key)
+
+	# initialize set of dest paths
+	# as we categorize them we will remove them from this set
+	dest_paths = set(dest_path_dict)
+	
+	# for path in src
+	for line in src_sums:	
+		key,path = line.split(' ',1)
+		
+		# if path is in dest
+		if path in dest_path_dict:
+
+			# if hash changed --> modified
+			dkey = dest_path_dict[path][0]
+			if key != dkey:
+				modified.add(path)
+				print "mod: {0}".format(joinpath(src_dir,path))
+				#print "modified: [{0}] {1}".format(key, path)
+				# this path has been categorized, remove from set
+				dest_paths.discard(path)
+			
+			# else hash same --> no changes 
+			else:
+				dest_paths.discard(path)
+			
+		# else path not in dest (moved or new)
+		else:
+			# if hash is in dest hashes --> moved
+			if key in dest_hash_dict:
+				dpaths = dest_hash_dict[key]
+				
+				# duplicates are problematic for detecting if something moved
+				if len(dpaths) > 1:
+					#print "duplicate files in destination directory. [new or moved]"
+					#print "new: [{0}] {1}".format(key, path)
+					print "dup: {0}".format(joinpath(src_dir, path))
+					new.add(path)
+				
+				else:
+					# there is only one destination path (but it is different from source path)
+					moved.add(path)
+					dpath = dpaths[0]
+					sp = joinpath(dest_dir, path)
+					dp = joinpath(dest_dir, dpath)
+					print "mov: {0} --> {1}".format(dp, sp)
+					# this path has been categorized, remove from set
+					dest_paths.discard(dpath)
+
+			# else new file (neither hash nor path was in dest)
+			else:
+				new.add(path)
+				print "add: {0}".format(joinpath(src_dir, path))
+
+	# everything that remains in dest were removed / deleted
+	removed = dest_paths
+	for path in removed:
+		#print "removed: [{0}] {1}".format(key, path)
+		print "del: {0}".format(joinpath(dest_dir, path))
+			
+
+			
+def sha1sums(path):
+	# change directory first so paths are relative to base
+	cmd = 'cd {0} && find . -type f -exec sha1sum {{}} \;'.format(path)
+	p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+	out,err = p.communicate()
+	if err:
+		sys.stderr.write(err)
+	return [x for x in out.strip().split('\n') if x]
+
+
+
+def joinpath(a, *p):
+	"""safer alternative to os.path.join"""
+	path = a.rstrip('/')
+	for b in p:
+		b = b.strip('./ ')
+		path += '/' + b
+	return path
+
+
+if __name__=='__main__':
+
+	parser = argparse.ArgumentParser(description='directory diff')
+	parser.add_argument('--diff', metavar=('SOURCE','DEST'), nargs=2, help='diff two directories')
+	parser.add_argument('--verbose', action='store_const', const=True, help='display verbose messages')
+	parser.add_argument('--find-duplicates', nargs="*", help='find all duplicate files')
+	parser.add_argument('--find-duplicates-interactive', nargs="*", help='find all duplicate files')
+	args = parser.parse_args()
+	
+	# set verbose flag
+	global VERBOSE
+	VERBOSE = args.verbose if args.verbose else False
+
+	if args.diff:
+		source,dest = args.diff
+		src_sums = sha1sums(source)
+		dest_sums = sha1sums(dest)
+		ddiff(src_sums, dest_sums, source, dest)
+
+	elif args.find_duplicates:
+		target = args.find_duplicates
+		print "Finding all duplicate files (very slow)"
+		#find_duplicates(target)
+
+	elif args.find_duplicates_interactive:
+		target = args.find_duplicates_interactive
+		print "Finding all duplicate files (very slow)"
+		#find_duplicates(target, interactive=True)
+
+	# help
+	else:
+		parser.print_usage()
+
+
