@@ -428,34 +428,56 @@ def print_exiv2_metadata(path):
 		print tag.key.rjust(45) + ': ' + value
 
 
+
+#### module level variable for function state
+REMDIRS = []
+
 def remove_duplicates_interactive(paths):
 	print '\n' + '\n'.join("{i}: {p}".format(i=i, p=paths[i]) for i in range(len(paths))) 
-	tryagain = True
-	while tryagain:
-		try:
-			# prompt user which items to save
-			choice = int(raw_input("Delete all except: "))
 
-			# do not allow user to delete all items, make sure choices are within the valid range
-			unlink_list = range(len(paths))
-			unlink_list.remove(choice)
-			tryagain = False
+	global REMDIRS 
+	unlink_list = range(len(paths))
+
+	# if a user selected one of these directories before, proceed automatically
+	for d in REMDIRS:
+		if len(unlink_list) < len(paths):
+			break
+		for i in unlink_list:
+			if paths[i].startswith(d):
+				unlink_list.remove(i)
+				break
+
+	# if we havent selected which file to save, ask user	
+	if len(unlink_list) == len(paths):
+		# prompt user interactively
+		tryagain = True
+		while tryagain:
+			try:
+				# prompt user which items to save
+				choice = int(raw_input("Delete all except: "))
+
+				# remember chosen directory
+				REMDIRS.append(os.path.dirname(paths[choice]))
+
+				# do not allow user to delete all items, make sure choices are within the valid range
+				unlink_list = range(len(paths))
+				unlink_list.remove(choice)
+				tryagain = False
 			
-			# double check that we dont delete everything
-			assert(len(unlink_list) < len(paths))
+			except ValueError as e:
+				print "Invalid selection"
+	
+	# double check that we dont delete everything
+	assert(len(unlink_list) < len(paths))
+	
+	# delete duplicates 
+	for i in unlink_list:
+		p = paths[i]
+		print "Deleting {i}: {p}".format(i=i,p=p)
+		os.unlink(p)
 
-			# delete duplicates 
-			for i in unlink_list:
-				p = paths[i]
-				print "Deleting {i}: {p}".format(i=i,p=p)
-				os.unlink(p)
-			
-		except ValueError as e:
-			print "Invalid selection"
 
-
-
-def find_duplicates(directories, interactive=False):
+def find_duplicates(directories, interactive=False, delete=False):
 	hashmap = {}
 	
 	for d in directories:
@@ -541,7 +563,6 @@ if __name__=='__main__':
 		target = args.find_duplicates_interactive
 		print "Finding all duplicate files (very slow)"
 		find_duplicates(target, interactive=True)
-
 
 	elif args.raw_previews:
 		previews(args.raw_previews)
