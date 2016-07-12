@@ -1,0 +1,78 @@
+#!/usr/bin/python
+
+"""
+Scan directories and move files based on filename heuristics.
+Currently it looks for files with the same name but different extensions.
+
+Use bash globbing to scan multiple potential target directories
+
+e.g. To scan and display what files will be moved
+photorg-move-by-name 2016-05-30 2016-??-??_* 
+
+e.g. After reviewing the changes, add the move flag to relocate files
+photorg-move-by-name 2016-05-30 2016-??-??_* --move
+"""
+
+import sys
+import argparse
+import os
+from common import *
+from os.path import basename, splitext
+
+
+
+def move_by_name(source_files, target_files, move=False):
+    """  """
+    #s_dict = dict((splitext(basename(p))[0], p) for p in source_files)
+    t_dict = dict((splitext(basename(p))[0], p) for p in target_files)
+
+    targets = t_dict.keys()
+    targets.sort()
+
+    #sources = s_dict.keys()
+    #sources.sort()
+
+    for path in source_files:
+        bname = basename(path)
+        name,ext = splitext(bname)
+        if name in t_dict:
+            target = t_dict[name]
+            new_path = os.path.join(os.path.dirname(target), bname)
+            if os.path.exists(new_path):
+                print "Warning: Match found but destination path exists!", new_path
+            else:
+                print "{p} --> {t}".format(p=path, t=new_path)
+                if move:
+                    os.rename(path, new_path)
+        else:
+            print "No match found: ", path
+            
+
+
+
+
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description=__doc__.strip())
+    parser.add_argument('source', metavar="SOURCE", help="Directory to scan and relocate files FROM")
+    parser.add_argument('targets', metavar="DIR", nargs='+', help="Directories to scan and move files TO")
+    parser.add_argument('--move', action='store_true', default=False, help="Automatically move files if match is found")
+    args = parser.parse_args()
+
+    if args.targets and args.source:
+        # ls target and all source directories
+        source_files = list(ls(args.source, relative=False))
+        target_files = []
+        for dirname in args.targets:
+            target_files += ls(dirname, relative=False)
+
+        if args.move:
+            move_by_name(source_files, target_files, move=True)
+
+        else:
+            move_by_name(source_files, target_files, move=False)
+    else:
+        parser.print_usage()
+        sys.exit(1)
+
+

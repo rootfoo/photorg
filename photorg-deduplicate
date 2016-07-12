@@ -1,0 +1,105 @@
+#!/usr/bin/python
+
+"""
+Find all duplicate files. Files are traversed in the order specified.
+By default it will only list duplicates.
+    
+    --delete : DELETE ALL except the first occurance of duplicate files 
+    --move : Move dupliates into specified directory
+    --hardlink : Replace duplicates with hardlink to first occurance
+
+To keep orginals in named directories and remove from everything else use bash globbin:
+    https://www.gnu.org/software/bash/manual/bashref.html#Pattern-Matching
+    photorg-deduplicate 2015-07-??_* 2015-07-?? 
+"""
+
+
+import sys
+import argparse
+import os
+from common import *
+#import time
+#from subprocess import Popen, PIPE
+#from shutil import copyfile
+
+
+def find_duplicates(directories):
+    md = multidict()
+    # for each directory in directories
+    for d in directories:
+        # list all files and sort
+        files = list(ls(d, relative=False))
+        files.sort()
+        # append sha1(file) to multidict
+        for path in files:
+            # only add unique paths to list, in case directories overlap
+            # this will prevent accidentally deleting files if same dir specified more than once
+            digest = sha1(path)
+            if (digest in md) and (path in md[digest]):
+                continue
+            else:
+                md[digest] = path
+
+    # prune multidict, only keep files that are duplicates
+    # use list() to iterate first so dict doesnt change size while pop()ing
+    for digest,paths in list(md.iteritems()):
+        if len(paths) < 2:
+            md.pop(digest)
+    
+    return md
+
+
+
+def print_duplicates(md):
+    for digest,paths in md.iteritems():
+        for p in paths:
+            print digest, p
+        # print blank line between groups
+        print ""
+
+
+def delete_duplicates(md):
+    """md : multidict with digest as key, value is list of paths
+    keep first path, delete the rest"""
+    for digest,paths in md.iteritems():
+        # do not delete the first path on the list
+        keep_path = paths[0]
+        # use sets to avoid deleting all files if paths occur multiple times in list
+        delete_paths = set(paths)-set([keep_path])
+        print "+ {d} {p}".format(d=digest, p=keep_path)
+        for p in delete_paths:
+            print "- {d} {p}".format(d=digest, p=p)
+            os.unlink(p)
+        print ""
+
+
+
+
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description=__doc__.strip())
+    parser.add_argument('directories', metavar='DIR', nargs='+', help='Directories to scan for duplicates')
+    parser.add_argument('--delete', action='store_true', help='')
+    #parser.add_argument('--hardlink', action='store_true', help='Replace duplicate with hardlink')
+    #parser.add_argument('--move',  help='Move duplicates to specified directory')
+    parser.add_argument('--verbose', action='store_true', help='display verbose messages')
+    args = parser.parse_args()
+
+    # set verbose flag
+    global VERBOSE
+    VERBOSE = args.verbose if args.verbose else False
+
+    if args.directories:
+        md = find_duplicates(args.directories)
+        
+        if args.delete:
+            delete_duplicates(md)
+        
+        else:
+            print_duplicates(md)
+
+    else:
+        parser.print_usage()
+
+
+
