@@ -5,7 +5,7 @@ common utility functions
 
 import os, hashlib
 
-def sha1(path, blocksize=10000000):
+def sha1(path, blocksize=4096):
     """return the sha1 hex digest of path"""
     with open(path) as f:
         block = f.read(blocksize)

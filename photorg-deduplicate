@@ -126,24 +126,24 @@ if __name__=='__main__':
         # --from-file
         if args.from_file:
             # parse source file into multidict
+            source_md = multidict()
             with open(args.from_file) as f:
-                source_md = multidict()
                 for line in f:
                     # maxsplit=1 in case there are spaces in the path
                     digest,path = line.split(' ', 1)
                     source_md[digest] = path.strip()
                 
-                # find files that are duplicates of those listed in source file
-                md = find_duplicates_with_source(args.directories, source_md)
+            # find files that are duplicates of those listed in source file
+            md = find_duplicates_with_source(args.directories, source_md)
 
-                # --delete 
-                if args.delete:
-                    # detele all including the first because assumed that source files are stored elsewhere
-                    delete_duplicates(md, keep_first=False)
-                
-                # default
-                else:
-                    print_duplicates(md)
+            # --delete 
+            if args.delete:
+                # detele all including the first because assumed that source files are stored elsewhere
+                delete_duplicates(md, keep_first=False)
+            
+            # default
+            else:
+                print_duplicates(md)
 
         # find duplicates in local directories
         else:
