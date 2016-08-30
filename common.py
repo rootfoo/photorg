@@ -43,31 +43,43 @@ def realpath(p):
 
 
 
-def ls(path, relative=True, hidden=False, recursive=True):
-    """walk directory and yield paths to files"""
-    base = realpath(path) 
+def ls(path, relative=True, hidden=False, recursive=True, isfile=False):
+	"""
+	walk directory and yield paths to files
+	files : only include regular files, ignore symlinks, etc.
+	recursive : decend into children directories
+	hidden : whether or not to include hidden files
 
-    for root, dirs, files in os.walk(base, topdown=True):
+	"""
+	base = realpath(path) 
 
-        # skip hidden directories
-        for dname in dirs:
-            if not hidden and dname.startswith('.'):
-                dirs.remove(dname)
+	for root, dirs, files in os.walk(base, topdown=True):
 
-        for name in files:
-            # skip hidden files 
-            if not hidden and name.startswith('.'):
-                continue
-            
-            if relative:
-                yield os.path.relpath(os.path.join(root, name), base)
+		# skip hidden directories
+		for dname in dirs:
+			if not hidden and dname.startswith('.'):
+				dirs.remove(dname)
 
-            else:
-                yield os.path.join(root, name)
-        
-        # exit after first loop if not recursive
-        if not recursive:
-            break
+		for name in files:
+			path = os.path.join(root,name)
+
+			# skip hidden files 
+			if not hidden and name.startswith('.'):
+				continue
+
+			# skop non-regular files
+			if isfile and not os.path.isfile(path):
+				continue
+
+			if relative:
+				yield os.path.relpath(path, base)
+
+			else:
+				yield path
+
+		# exit after first loop if not recursive
+		if not recursive:
+			break
 
 
 class multidict(dict):

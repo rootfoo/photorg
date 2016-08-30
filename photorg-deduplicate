@@ -31,7 +31,7 @@ def sha1sums(directories):
     # for each directory in directories
     for d in directories:
         # list all files and sort
-        for path in sorted(ls(d, relative=False)):
+        for path in sorted(ls(d, relative=False, isfile=True)):
             digest = sha1(path)
             # don't add paths to value list more than once
             # this will prevent accidentally deleting files if same dir specified more than once
