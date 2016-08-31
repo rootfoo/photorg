@@ -99,6 +99,7 @@ def delete_duplicates(md, keep_first=True):
             print "+ {d} {p}".format(d=digest, p=keep_path)
         for p in delete_paths:
             print "- {d} {p}".format(d=digest, p=p)
+			# throws OSError if permission denied, TODO: catch?
             os.unlink(p)
         print ""
 
