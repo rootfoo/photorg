@@ -98,8 +98,12 @@ def delete_duplicates(md, keep_first=True):
             delete_paths.remove(keep_path)
             print "+ {d} {p}".format(d=digest, p=keep_path)
         for p in delete_paths:
-            print "- {d} {p}".format(d=digest, p=p)
-            os.unlink(p)
+            try:
+                print "- {d} {p}".format(d=digest, p=p)
+                os.unlink(p)
+            except OSError as e:
+                print "Error:" + str(e) 
+
         print ""
 
 
