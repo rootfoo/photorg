@@ -3,7 +3,7 @@
 common utility functions
 """
 
-import os, hashlib
+import os, sys, hashlib
 from shutil import copyfile
 
 
@@ -101,29 +101,22 @@ class FileCollisionError(Exception):
 
 
 
-def copy_file(source, target, target_is_dir=False, verbose=False):
+def copy_file(source, target, verbose=False, hardlink=False, delete=False):
     """
-    Copy source file to target directory. 
-    On unix, first try to hard-link. If that fails, perform regular copy.
-
-    source := file to copy
-    target := destination path 
-    target_is_dir := copy the source file to the target directory and perserve filename
-
+    Copy file safely
+     - don't overwrite existing destination files
+     - compare file sizes before deleting
+     - create destination directories as needed
+     - as idempotent as possible
+    hardlink on Linux: first try to hard-link. If that fails, perform regular copy.
     """
 
     # first make sure that the source path exists:
     if not os.path.isfile(source):
         raise Exception('File does not exist (or is not a regular file): ' + source)
 
-    # target could be a file or directory, expand path as appropriate
-    if target_is_dir:
-        target_dir = target
-        target_path = os.path.join(target, os.path.basename(source))
-
-    else: 
-        target_dir = os.path.dirname(target)
-        target_path = target
+    target_dir = os.path.dirname(target)
+    target_path = target
 
     # create directory if it doesn't exist
     if not os.path.isdir(target_dir):
@@ -131,37 +124,48 @@ def copy_file(source, target, target_is_dir=False, verbose=False):
         # probably target_is_dir was used incorrectly
         os.makedirs(target_dir, 0755)
 
-    # if the target file already exists, check if the it's different
+    # if the target file path already exists, check if the content is different
     if os.path.exists(target_path):
 
-        if os.path.samefile(source, target_path):
-            # files are the same inode, can safely skip
-            return
+        # can safely skip if same inode
+        if not os.path.samefile(source, target_path):
 
-        # check if they have the same size
-        elif os.stat(source).st_size == os.stat(target_path).st_size:
+            # compare sizes
+            if os.stat(source).st_size == os.stat(target_path).st_size:
 
-            # check if they are the same hash
-            if sha1sum(source) != sha1sum(target_path):
-                # file exists but has different hash
-                raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
+                # compare hash
+                if sha1sum(source) != sha1sum(target_path):
+                    raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
 
-        else:
-            # target file exists but is a different size
-            raise FileCollisionError('Destination file exists and is different size: {src}, {dest}\n'.format(src=source, dest=target_path))
+            # target file exists but has different size
+            else:
+                raise FileCollisionError('Destination file exists and is different size: {src}, {dest}\n'.format(src=source, dest=target_path))
 
-
-    # file did not already exist
+    # target does not already exist
     else:
+        if hardlink:
+            # create a hardlink on unix
+            try:
+                os.link(source, target_path)
+                if verbose: print "Hardlink: {t} -> {s}".format(s=source, t=target_path)
 
-        # create a hardlink on unix
-        try:
-            os.link(source, target_path)
-            if verbose: print "Linking: {s} -> {t}".format(s=source, t=target_path)
+            # if link fails, failback to copy
+            except OSError as e:
+                if verbose: 
+                    sys.stderr.write("Hardlink failed; copying instead\n")
+                    sys.stderr.write("Copying: {s} -> {t}\n".format(s=source, t=target_path))
+                copyfile(source, target_path)
 
-        # otherwise, copy the file
-        except OSError as e:
-            if verbose: print "Copying: {s} -> {t}".format(s=source, t=target_path)
+        # copy
+        else:
+            if verbose: sys.stderr.write("Copying: {s} -> {t}\n".format(s=source, t=target_path))
             copyfile(source, target_path)
 
+    # file was either copied or target already existed and was identical
+    # can delete source, but first verify size just to be safe
+    if delete and (os.stat(source).st_size == os.stat(target_path).st_size):
+        if verbose: sys.stderr.write("Deleting: {0}\n".format(source))
+        os.unlink(source)
+
+        
 
