@@ -3,7 +3,9 @@
 common utility functions
 """
 
-import os, sys, hashlib
+import os
+import logging
+import hashlib
 from shutil import copyfile
 
 
@@ -147,24 +149,23 @@ def copy_file(source, target, verbose=False, hardlink=False, delete=False):
             # create a hardlink on unix
             try:
                 os.link(source, target_path)
-                if verbose: print "Hardlink: {t} -> {s}".format(s=source, t=target_path)
+                logging.info("Hardlink: {t} -> {s}".format(s=source, t=target_path))
 
             # if link fails, failback to copy
             except OSError as e:
-                if verbose: 
-                    sys.stderr.write("Hardlink failed; copying instead\n")
-                    sys.stderr.write("Copying: {s} -> {t}\n".format(s=source, t=target_path))
+                logging.warn("Hardlink failed; copying instead")
+                logging.warn("Copying: {s} -> {t}".format(s=source, t=target_path))
                 copyfile(source, target_path)
 
         # copy
         else:
-            if verbose: sys.stderr.write("Copying: {s} -> {t}\n".format(s=source, t=target_path))
+            logging.info("Copying: {s} -> {t}".format(s=source, t=target_path))
             copyfile(source, target_path)
 
     # file was either copied or target already existed and was identical
     # can delete source, but first verify size just to be safe
     if delete and (os.stat(source).st_size == os.stat(target_path).st_size):
-        if verbose: sys.stderr.write("Deleting: {0}\n".format(source))
+        logging.info("Deleting: {0}".format(source))
         os.unlink(source)
 
         
