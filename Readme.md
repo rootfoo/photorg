@@ -1,10 +1,18 @@
 
 # Intro
 
-Photorg is a photo organizer that creates a directory structure based on EXIF date information.
+The Photorg project contains command line tools for organizing photos and videos in various formats.
 
-this scans all the photos in the source directory (recursively) and organizis them into a folder strutcured based on date
-an event is a series of photos without a day gap greater than 4 days (configurable)
+## photorg
+
+photorg recursively scans a source directory of photos using the very robust exiftool and extracts the creation date of each file.
+The files are then grouped into directories by event date, such that each event directory contains all the sequence of photos such that the origination date of the photos is less than the configured gap (default 4 days). 
+
+
+## photorg-deduplicate
+
+photorg-deduplciate is a tool for scanning directories and removing all but the first occurrence of duplicate files. Files are hashed with the sha1 algorithm. The tool is designed to be compatible with common Linux utilities (ssh, find, sha1sum) such that it can discover duplicate files on remote servers. 
+
 
 # Build
 
