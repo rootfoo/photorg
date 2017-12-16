@@ -1,9 +1,0 @@
-
-
-
-Dont use cache by default. When cleaning directories by moving and deleting files the cache makes ddiff report a state that's no longer accurate. Instead, have a command line flag to cache and/or use cache.
-
-
-
-
-
