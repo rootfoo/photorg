@@ -99,7 +99,7 @@ def date_sorted_paths(source_dir):
 
     for exif in exif_list:
         try:
-            # DateTimeOriginal is shutter time, CreateDate is file origination time
+            # DateTimeOriginal is shutter time (not set for movies), CreateDate is file origination time 
             path = os.path.realpath(exif['SourceFile'])
             date = datetime.strptime(exif['CreateDate'], '%Y:%m:%d %H:%M:%S')
             date_path_list.append((date,path))
@@ -126,7 +126,7 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
     count = 0
     total = len(date_paths)
 
-    # iterate over all ImageMetadata objects sorted by Exif.Image.DateTime
+    # iterate over (date,path) sorted by date
     for date,path in date_paths:
 
         # first iteration: initialize date and create event dir

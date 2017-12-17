@@ -26,11 +26,13 @@ from photorg import *
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description=__doc__.strip())
     parser.add_argument('directories', metavar='DIR', nargs='+', help='Directories to scan for duplicates')
-    parser.add_argument('--delete', action='store_true', help='')
+    parser.add_argument('--delete', action='store_true', help='delete ALL except first occurance of duplicate files')
     #parser.add_argument('--hardlink', action='store_true', help='Replace duplicate with hardlink')
     #parser.add_argument('--move',  help='Move duplicates to specified directory')
     parser.add_argument('--from-file',  help='Provide a text file with sha1sums from an alternate location')
     parser.add_argument('--from-stdin',  help='Provide a text file with sha1sums from an alternate location')
+    #parser.add_argument('--protect', action='store_true', help='Do not delete ANY file from first directory, even if duplicates exist')
+    #parser.add_argument('--cache', action='store_true', help='Cache resulting SHA1 digests and use for subsequent invocations')
     parser.add_argument('--verbose', action='store_true', help='display verbose messages')
     args = parser.parse_args()
 

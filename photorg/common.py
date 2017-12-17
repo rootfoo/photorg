@@ -103,7 +103,7 @@ class FileCollisionError(Exception):
 
 
 
-def copy_file(source, target, verbose=False, hardlink=False, delete=False):
+def copy_file(source, target, hardlink=False, delete=False):
     """
     Copy file safely
      - don't overwrite existing destination files
