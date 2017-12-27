@@ -11,7 +11,7 @@ if __name__=='__main__':
     parser.add_argument('DEST', help='output directory for organized directories of photos')
     parser.add_argument('-v', '--verbose', action='count', help='verbosity level; -v=warn, -vv=info, -vvv=debug')
     parser.add_argument('--logfile', type=str, help='logging file')
-    parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events.')
+    parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events (default 4).')
     parser.add_argument('--hardlink', action='store_true', help='hardlink instead of copy')
     parser.add_argument('--delete', action='store_true', help='delete source file after copy')
     parser.add_argument('--rename', action='store_true', help='rename file if destination exists but is different')

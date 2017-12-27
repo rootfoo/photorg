@@ -11,7 +11,7 @@ from shutil import copyfile
 
 
 
-def sha1sum(path, blocksize=4096):
+def sha1(path, blocksize=4096):
     """return the sha1 hex digest of path"""
     with open(path) as f:
         block = f.read(blocksize)
@@ -23,12 +23,12 @@ def sha1sum(path, blocksize=4096):
     return digest
 
 
-def shasums(path):
-    """walk directory and yield (sha1(path), path)"""
-    for base,dirs,files in os.walk(source):
-        for name in files:
-            path = os.path.join(base, name)
-            yield (sha1(path), path)
+#def shasums(path):
+#    """walk directory and yield (sha1(path), path)"""
+#    for base,dirs,files in os.walk(source):
+#        for name in files:
+#            path = os.path.join(base, name)
+#            yield (sha1(path), path)
 
 
 
@@ -50,7 +50,7 @@ def realpath(p):
 
 
 
-def ls(path, relative=True, hidden=False, recursive=True, isfile=False):
+def ls(path, relative=True, hidden=True, recursive=True, isfile=False):
     """
     walk directory and yield paths to files
     files : only include regular files, ignore symlinks, etc.
@@ -136,7 +136,7 @@ def copy_file(source, target, hardlink=False, delete=False):
             if os.stat(source).st_size == os.stat(target_path).st_size:
 
                 # compare hash
-                if sha1sum(source) != sha1sum(target_path):
+                if sha1(source) != sha1(target_path):
                     raise FileCollisionError('Destination file exists but has different hash: {src}, {dest}\n'.format(src=source, dest=target_path))
 
             # target file exists but has different size
@@ -167,6 +167,12 @@ def copy_file(source, target, hardlink=False, delete=False):
     if delete and (os.stat(source).st_size == os.stat(target_path).st_size):
         logging.info("Deleting: {0}".format(source))
         os.unlink(source)
+
+        # check for and remove empty directories
+        dirnam = os.path.dirname(source)
+        if not os.listdir(dirnam):
+            logging.info("Deleting empty directory: {0}".format(dirnam))
+            os.rmdir(dirnam)
 
         
 

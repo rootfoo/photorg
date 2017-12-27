@@ -12,11 +12,11 @@ from common import *
 
 
 
-def new_event_dir(base, date):
+def new_event_dir(base, date, date_fmt="%Y/%Y-%m-%d"):
     """
     Create a directory, inside base dir, named by date, if not already exists
     """
-    event_dir = os.path.join(base, date.strftime("%Y-%m-%d"))
+    event_dir = os.path.join(base, date.strftime(date_fmt))
     if not os.path.exists(event_dir):
         os.makedirs(event_dir, 0755)
         logging.info("New Event: {0}".format(event_dir))
@@ -99,12 +99,15 @@ def date_sorted_paths(source_dir):
 
     for exif in exif_list:
         try:
-            # DateTimeOriginal is shutter time (not set for movies), CreateDate is file origination time 
+            # DateTimeOriginal is shutter time (not set for movies), CreateDate is file origination time
+            # AVI movies from Olympus cameras seem to have DateTimeOriginal and not CreateDate
             path = os.path.realpath(exif['SourceFile'])
-            date = datetime.strptime(exif['CreateDate'], '%Y:%m:%d %H:%M:%S')
+            date_key = 'CreateDate' if 'CreateDate' in exif else 'DateTimeOriginal'
+            date = datetime.strptime(exif[date_key], '%Y:%m:%d %H:%M:%S')
             date_path_list.append((date,path))
-        except KeyError as e:
-            logging.error("EXIF Error ({0}): {1}".format(str(e).strip("'"), path))
+        
+        except (KeyError, ValueError) as e:
+            logging.error("EXIF {0}: {1}".format(str(e).strip("'"), path))
 
     logging.info('{n} files have EXIF data'.format(n=len(date_path_list)))
     return sorted(date_path_list, key=lambda x: x[0])
@@ -123,7 +126,7 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
     dest = os.path.realpath(dest_dir)
     source = os.path.realpath(source_dir)
     date_paths = date_sorted_paths(source)
-    count = 0
+    count = 1
     total = len(date_paths)
 
     # iterate over (date,path) sorted by date

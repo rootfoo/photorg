@@ -32,11 +32,20 @@ The tool was designed to be as safe and robust as possible in the following ways
 
 # Install 
 
+## Required packages
 sudo apt-get install exiftool
-python setup.py build
-sudo python setup.py install
-python setup.py clean
 
+## From outside the project directory
+sudo pip install photorg
+
+## From the CWD containing setup.py
+sudo pip install .
+
+## Verify
+pip show photorg
+
+## Uninstall
+sudo pip uninstall photorg
 
 # Usage
 

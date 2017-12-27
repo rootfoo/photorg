@@ -27,6 +27,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description=__doc__.strip())
     parser.add_argument('directories', metavar='DIR', nargs='+', help='Directories to scan for duplicates')
     parser.add_argument('--delete', action='store_true', help='delete ALL except first occurance of duplicate files')
+    #parser.add_argument('--delete-all', action='store_true', help='delete ALL including first occurance')
     #parser.add_argument('--hardlink', action='store_true', help='Replace duplicate with hardlink')
     #parser.add_argument('--move',  help='Move duplicates to specified directory')
     parser.add_argument('--from-file',  help='Provide a text file with sha1sums from an alternate location')
@@ -38,9 +39,16 @@ if __name__=='__main__':
 
     # set verbose flag
     global VERBOSE
-    VERBOSE = args.verbose if args.verbose else False
-    
+    VERBOSE = args.verbose
+
     if args.directories:
+
+        # first verify that the directories are valid
+        for d in args.directories:
+            if not os.path.isdir(d):
+                sys.stderr.write('Directories do not exist\n')
+                sys.exit(1)
+
  
         # --from-file
         if args.from_file:
