@@ -27,9 +27,9 @@ def new_event_dir(base, date, date_fmt="%Y/%Y-%m-%d"):
 
 def is_duplicate_file(source, directory):
     """check for any files in the target directory with the same hash as the source file"""
-    source_hash = sha1sum(source)
+    source_hash = sha1(source)
     for path in ls(directory, relative=False):
-        if sha1sum(path) == source_hash:
+        if sha1(path) == source_hash:
             return True
     return False
 

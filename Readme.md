@@ -47,6 +47,9 @@ pip show photorg
 ## Uninstall
 sudo pip uninstall photorg
 
+## Developer install, add project folder to python path
+sudo pip install -e .
+
 # Usage
 
 photorg -h  
