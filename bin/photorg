@@ -32,7 +32,7 @@ if __name__=='__main__':
     # set log level on root logger or INFO wont display
     logging.getLogger().setLevel(level)
     
-    if args.logfile:
+    if args.log:
         # errors always go to stderr stream
         sh = logging.StreamHandler()
         sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
@@ -40,7 +40,7 @@ if __name__=='__main__':
         logging.getLogger('').addHandler(sh)
         
         # verbose messages go to log file
-        fh = logging.FileHandler(args.logfile)
+        fh = logging.FileHandler(args.log)
         fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         fh.setLevel(level)
         logging.getLogger('').addHandler(fh)
