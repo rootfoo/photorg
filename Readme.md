@@ -52,10 +52,11 @@ sudo pip install -e .
 
 # Usage Examples
 
+```bash
 photorg -h 
 photorg ~/photos/unorganized/ ~/photos/organized/
 photorg --gap 2 --progress --log log.txt unorganized/ organized/
 photorg -v /tmp/photos ~/photos
 photorg -vvv -log /tmp/logfile unorganized/ organized/
-
+```
 
