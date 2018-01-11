@@ -33,26 +33,38 @@ The tool was designed to be as safe and robust as possible in the following ways
 # Install 
 
 ## Required packages
+```
 sudo apt-get install exiftool
+```
 
 ## From outside the project directory
+```
 sudo pip install photorg
+```
 
 ## From the directory containing setup.py
+```
 sudo pip install .
+```
 
 ## Verify
+```
 pip show photorg
+```
 
 ## Uninstall
+```
 sudo pip uninstall photorg
+```
 
 ## Developer install, add project folder to python path
+```
 sudo pip install -e .
+```
 
 # Usage Examples
 
-```bash
+```
 photorg -h 
 photorg ~/photos/unorganized/ ~/photos/organized/
 photorg --gap 2 --progress --log log.txt unorganized/ organized/
