@@ -38,7 +38,7 @@ sudo apt-get install exiftool
 ## From outside the project directory
 sudo pip install photorg
 
-## From the CWD containing setup.py
+## From the directory containing setup.py
 sudo pip install .
 
 ## Verify
@@ -50,13 +50,12 @@ sudo pip uninstall photorg
 ## Developer install, add project folder to python path
 sudo pip install -e .
 
-# Usage
+# Usage Examples
 
-photorg -h  
-photorg /tmp/photos ~/photos
-photorg --gap 2 
-photorg --progress /tmp/photos ~/photos
+photorg -h 
+photorg ~/photos/unorganized/ ~/photos/organized/
+photorg --gap 2 --progress --log log.txt unorganized/ organized/
 photorg -v /tmp/photos ~/photos
-photorg -vvv -log /tmp/logfile /tmp/photos ~/photos
+photorg -vvv -log /tmp/logfile unorganized/ organized/
 
 
