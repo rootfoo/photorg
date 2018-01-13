@@ -72,3 +72,15 @@ photorg -v /tmp/photos ~/photos
 photorg -vvv -log /tmp/logfile unorganized/ organized/
 ```
 
+
+
+
+# Future work
+
+Ultimately, I think it would be fun and useful to use a [hierarchical clustering][1] or 
+[density based machine learning][2] algorithm to group the photos, by date, into event
+groups. However, in the interim, the --gap parameter has worked really well in practice.
+
+
+[1]: https://en.wikipedia.org/wiki/Hierarchical_clustering
+[2]: https://en.wikipedia.org/wiki/Cluster_analysis#Density-based_clustering
