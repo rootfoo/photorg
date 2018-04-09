@@ -75,7 +75,7 @@ def exiftool_json(path):
     """
     # make sure the preview file doesn't already exist
     logging.info('Running exiftool')
-    p = Popen(['/usr/bin/exiftool', '-recurse', '-json', path], stdout=PIPE, stderr=PIPE)
+    p = Popen(['/usr/bin/exiftool', '-recurse', '-dateFormat', "%Y-%m-%d %H:%M:%S", '-json', path], stdout=PIPE, stderr=PIPE)
     out,err = p.communicate()
     if err:
         logging.info(', '.join(x.strip() for x in str(err).split('\n') if x))
@@ -99,11 +99,16 @@ def date_sorted_paths(source_dir):
 
     for exif in exif_list:
         try:
-            # DateTimeOriginal is shutter time (not set for movies), CreateDate is file origination time
-            # AVI movies from Olympus cameras seem to have DateTimeOriginal and not CreateDate
+            # DateTimeOriginal is shutter time; CreateDate is file origination time
+            # MTS movies from Sony have DateTimeOriginal
+            # AVI movies from Olympus cameras have DateTimeOriginal
             path = os.path.realpath(exif['SourceFile'])
-            date_key = 'CreateDate' if 'CreateDate' in exif else 'DateTimeOriginal'
-            date = datetime.strptime(exif[date_key], '%Y:%m:%d %H:%M:%S')
+            date_key = 'DateTimeOriginal'
+            if date_key not in exif:
+                logging.warn("{0} not in EXIF for {1}".format(date_key, path))
+                date_key = 'CreateDate'
+
+            date = datetime.strptime(exif[date_key], '%Y-%m-%d %H:%M:%S')
             date_path_list.append((date,path))
         
         except (KeyError, ValueError) as e:

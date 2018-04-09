@@ -16,6 +16,8 @@ if __name__=='__main__':
     parser.add_argument('--delete', action='store_true', help='delete source file after copy')
     parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
     parser.add_argument('--progress', action='store_true', help='show progress')
+    # TODO
+    #parser.add_argument('--mtime-dates', action='store_true', help='Use dates from filesystem modified time')
     #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
     args = parser.parse_args()
    
