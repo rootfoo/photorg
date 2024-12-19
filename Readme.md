@@ -30,40 +30,61 @@ The tool was designed to be as safe and robust as possible in the following ways
  * Useful for file deduplication in general, not specific to photos or media
  * Designed to integrate with ubiquitous Linux tools such as ssh, find, and sha1sum for management of data on remote systems 
 
-# Install 
+To prune empty directories
+```find . -depth -type d -exec rmdir --ignore-fail-on-non-empty {} \; ```
 
-## Required packages
-```
-sudo apt-get install exiftool
-```
+# Install
 
-## From outside the project directory
+## Prerequisites (Ubuntu 24.04)
 ```
-sudo pip install photorg
+sudo apt install python3-full pipx libimage-exiftool-perl python3-build python3-pip
 ```
 
-## From the directory containing setup.py
+## Build python packages (sdist and wheel)
+Build the Python source and wheel packages from the repository. Then copy the wheel (.whl) file to the target host and proceed with installation.
 ```
-sudo pip install .
+python3 -m build
 ```
 
-## Verify
+See also: https://packaging.python.org/en/latest/flow/ 
+
+
+## Install package (wheel) for user / development
 ```
+# install from wheel
+python3 -m pip install dist/photorg-0.0.1-py3-none-any.whl
+
+# verify
 pip show photorg
+which photorg
+photorg --help
+
+# uninstall
+pip uninstall photorg
 ```
 
-## Uninstall
+
+## Install package globally with pipx
 ```
-sudo pip uninstall photorg
+pipx ensurepath
+
+# Pipx install globally by setting environment variables
+sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install photorg-0.0.1-py3-none-any.whl 
+
+# verify install (env vars need to be same as install)
+sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx list
+which photorg
+photorg --help
+
+# uninistall
+sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx uninstall photorg
 ```
 
-## Developer install, add project folder to python path
-```
-sudo pip install -e .
-```
+See also: https://pipx.pypa.io/stable/installation/ 
+
+
 
 # Usage Examples
-
 ```
 photorg -h 
 photorg ~/photos/unorganized/ ~/photos/organized/
@@ -71,16 +92,3 @@ photorg --gap 2 --progress --log log.txt unorganized/ organized/
 photorg -v /tmp/photos ~/photos
 photorg -vvv -log /tmp/logfile unorganized/ organized/
 ```
-
-
-
-
-# Future work
-
-Ultimately, I think it would be fun and useful to use a [hierarchical clustering][1] or 
-[density based machine learning][2] algorithm to group the photos, by date, into event
-groups. However, in the interim, the --gap parameter has worked really well in practice.
-
-
-[1]: https://en.wikipedia.org/wiki/Hierarchical_clustering
-[2]: https://en.wikipedia.org/wiki/Cluster_analysis#Density-based_clustering

@@ -1,0 +1,23 @@
+[project]
+name = "photorg"
+version = "0.0.1"
+authors = [
+  { name="Marcus Hodges", email="0xmeta@gmail.com" },
+]
+description = "Organize photos, grouped by EXIF date"
+readme = "Readme.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.scripts]
+photorg = "photorg:photorg_main"
+photorg-deduplicate = "photorg:deduplicate_main"
+
+[project.urls]
+Homepage = "https://github.com/rootfoo/photorg"
+Issues = "https://github.com/rootfoo/photorg/issues"
+

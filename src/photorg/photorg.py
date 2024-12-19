@@ -1,14 +1,16 @@
 #!/usr/bin/python
 
+from __future__ import absolute_import
 import os
 import sys
 import json
 import logging 
+import argparse
 
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
 from subprocess import Popen, PIPE
-from common import *
+from .common import *
 
 
 
@@ -18,7 +20,7 @@ def new_event_dir(base, date, date_fmt="%Y/%Y-%m-%d"):
     """
     event_dir = os.path.join(base, date.strftime(date_fmt))
     if not os.path.exists(event_dir):
-        os.makedirs(event_dir, 0755)
+        os.makedirs(event_dir, 0o755)
         logging.info("New Event: {0}".format(event_dir))
     return event_dir
 
@@ -168,6 +170,68 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
         if progress: sys.stderr.write("{0}/{1}         \r".format(count, total))
         count += 1
 
+
+
+def photorg_main():
+    parser = argparse.ArgumentParser(description='Photo organization')
+    parser.add_argument('SOURCE', help='directory to source photos')
+    parser.add_argument('DEST', help='output directory for organized directories of photos')
+    parser.add_argument('-v', '--verbose', action='count', help='verbosity level; -v=warn, -vv=info, -vvv=debug')
+    parser.add_argument('--log', type=str, help='logging file')
+    parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events (default 4).')
+    parser.add_argument('--hardlink', action='store_true', help='hardlink instead of copy')
+    parser.add_argument('--delete', action='store_true', help='delete source file after copy')
+    parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
+    parser.add_argument('--progress', action='store_true', help='show progress')
+    # TODO
+    #parser.add_argument('--mtime-dates', action='store_true', help='Use dates from filesystem modified time')
+    #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
+    args = parser.parse_args()
+   
+    # set log level
+    if args.verbose == 1:
+        level = logging.WARN
+    elif args.verbose == 2:
+        level = logging.INFO
+    elif args.verbose >= 3:
+        level = logging.DEBUG
+    else:
+        level = logging.ERROR
+
+    # set log level on root logger or INFO wont display
+    logging.getLogger().setLevel(level)
+    
+    if args.log:
+        # errors always go to stderr stream
+        sh = logging.StreamHandler()
+        sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+        sh.setLevel(logging.ERROR)
+        logging.getLogger('').addHandler(sh)
+        
+        # verbose messages go to log file
+        fh = logging.FileHandler(args.log)
+        fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        fh.setLevel(level)
+        logging.getLogger('').addHandler(fh)
+    else:
+        # errors always go to stderr stream
+        sh = logging.StreamHandler()
+        sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+        sh.setLevel(level)
+        logging.getLogger('').addHandler(sh)
+
+    logger = logging.getLogger('photorg')
+
+    try:
+        # organize and copy files from SOURCE into DEST
+        organize_by_event(args.SOURCE, args.DEST, 
+                day_delta=args.gap, 
+                hardlink=args.hardlink, 
+                delete=args.delete, 
+                rename=args.rename, 
+                progress=args.progress) 
+    except Exception as e:
+        logger.exception('Unhandled exception')
 
 
 

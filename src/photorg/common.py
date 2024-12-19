@@ -13,7 +13,7 @@ from shutil import copyfile
 
 def sha1(path, blocksize=4096):
     """return the sha1 hex digest of path"""
-    with open(path) as f:
+    with open(path, 'rb') as f:
         block = f.read(blocksize)
         sha = hashlib.sha1()
         while block:
@@ -124,7 +124,7 @@ def copy_file(source, target, hardlink=False, delete=False):
     if not os.path.isdir(target_dir):
         # if this raises an exception then something is actually wrong
         # probably target_is_dir was used incorrectly
-        os.makedirs(target_dir, 0755)
+        os.makedirs(target_dir, 0o755)
 
     # if the target file path already exists, check if the content is different
     if os.path.exists(target_path):
