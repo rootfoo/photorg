@@ -50,17 +50,19 @@ See also: https://packaging.python.org/en/latest/flow/
 
 
 ## Install package (wheel) for user / development
+On Ubuntu `pipx` is preferred, but `pipx` and `pip` are interchangeable in the commands below.
 ```
-# install from wheel
-python3 -m pip install dist/photorg-0.0.1-py3-none-any.whl
+pipx ensurepath
+
+# install from wheel using pipx (for Ubuntu)
+python3 -m pipx install dist/photorg-0.0.1-py3-none-any.whl
 
 # verify
-pip show photorg
+pipx show photorg
 which photorg
-photorg --help
 
 # uninstall
-pip uninstall photorg
+pipx uninstall photorg
 ```
 
 

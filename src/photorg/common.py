@@ -153,13 +153,13 @@ def copy_file(source, target, hardlink=False, delete=False):
 
             # if link fails, failback to copy
             except OSError as e:
-                logging.warn("Hardlink failed; copying instead")
-                logging.warn("Copying: {s} -> {t}".format(s=source, t=target_path))
+                logging.warning("Hardlink failed; copying instead")
+                logging.warning("Copying: {s} --> {t}".format(s=source, t=target_path))
                 copyfile(source, target_path)
 
         # copy
         else:
-            logging.info("Copying: {s} -> {t}".format(s=source, t=target_path))
+            logging.info("Copying: {s} --> {t}".format(s=source, t=target_path))
             copyfile(source, target_path)
 
     # file was either copied or target already existed and was identical

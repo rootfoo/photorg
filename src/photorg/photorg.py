@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from __future__ import absolute_import
+import logging.handlers
 import os
 import sys
 import json
@@ -12,6 +13,10 @@ from multiprocessing import Pool, cpu_count
 from subprocess import Popen, PIPE
 from .common import *
 
+
+VIDEO_FILES_EXTENSIONS = ['webm', 'mkv', 'flv', 'vob', 'ogv', 'ogg', 'rrc', 'gifv', 'mng', 'mov', 'avi', 'qt', 'wmv', 
+                          'yuv', 'rm', 'asf', 'amv', 'mp4', 'm4p', 'm4v', 'mpg', 'mp2', 'mpeg', 'mpe', 'mpv', 'm4v', 
+                          'svi', '3gp', '3g2', 'mxf', 'roq', 'nsv', 'flv', 'f4v', 'f4p', 'f4a', 'f4b', 'mod']
 
 
 def new_event_dir(base, date, date_fmt="%Y/%Y-%m-%d"):
@@ -79,9 +84,41 @@ def exiftool_json(path):
     logging.info('Running exiftool')
     p = Popen(['/usr/bin/exiftool', '-recurse', '-dateFormat', "%Y-%m-%d %H:%M:%S", '-json', path], stdout=PIPE, stderr=PIPE)
     out,err = p.communicate()
+    
     if err:
-        logging.info(', '.join(x.strip() for x in str(err).split('\n') if x))
+        for msg in err.decode().strip().split('\n'):
+            logging.info("exiftool: " + msg.strip())
     return out
+
+
+
+def run_cmd(argcv=[]):
+    program = argcv[0]
+    logging.debug('Running {0}'.format(program))
+    p = Popen(argcv, stdout=PIPE, stderr=PIPE)
+    out,err = p.communicate()
+    if err:
+        for msg in err.decode().strip().split('\n'):
+            logging.error("{0}: {1}".format(program, msg.strip()))
+    return out
+
+
+
+def ffprobe_json(path):
+    """run ffprobe to get metadata from video formats"""
+    return run_cmd(["/usr/bin/ffprobe", "-v", "quiet", "-of", "json", "-show_entries", "format", path])
+
+
+
+def file_is_video(path):
+    """check if file extension is a known video file"""
+    parts = os.path.splitext(path)
+    if len(path) > 1:
+        ext = parts[1].lower().strip(".")
+        if ext in VIDEO_FILES_EXTENSIONS:
+            return True
+    return False
+
 
 
 
@@ -92,7 +129,8 @@ def date_sorted_paths(source_dir):
     return [(date,path)] 
     """
     date_path_list = []
-    
+
+    # images 
     try:
         exif_list = json.loads(exiftool_json(source_dir))
     except ValueError as e:
@@ -107,16 +145,33 @@ def date_sorted_paths(source_dir):
             path = os.path.realpath(exif['SourceFile'])
             date_key = 'DateTimeOriginal'
             if date_key not in exif:
-                logging.warn("{0} not in EXIF for {1}".format(date_key, path))
+                logging.warning("{0} not in EXIF for {1}".format(date_key, path))
                 date_key = 'CreateDate'
 
-            date = datetime.strptime(exif[date_key], '%Y-%m-%d %H:%M:%S')
-            date_path_list.append((date,path))
+            creation_date = datetime.strptime(exif[date_key], '%Y-%m-%d %H:%M:%S')
+            date_path_list.append((creation_date,path))
         
         except (KeyError, ValueError) as e:
             logging.error("EXIF {0}: {1}".format(str(e).strip("'"), path))
 
-    logging.info('{n} files have EXIF data'.format(n=len(date_path_list)))
+    # videos
+    for root, dirs, files in os.walk(source_dir):
+        for name in files:
+            if file_is_video(name):
+                path = os.path.join(root,name)
+                creation_date = None
+                try:
+                    out = ffprobe_json(path)
+                    js = json.loads(out)
+                    creation_str = js['format']['tags']['creation_time'] # e.g. 2024-10-27T18:55:15.000000Z
+                    creation_date = datetime.strptime(creation_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+                    date_path_list.append((creation_date,path))
+                except Exception as e:
+                    logging.error(e)
+                finally:
+                    logging.info("ffprobe {0} --> {1}".format(path, str(creation_date)))
+
+    logging.info('{n} files have date metadata'.format(n=len(date_path_list)))
     return sorted(date_path_list, key=lambda x: x[0])
 
 
@@ -133,12 +188,13 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
     dest = os.path.realpath(dest_dir)
     source = os.path.realpath(source_dir)
     date_paths = date_sorted_paths(source)
-    count = 1
+    count = 0
     total = len(date_paths)
 
     # iterate over (date,path) sorted by date
     for date,path in date_paths:
-
+        count += 1
+        
         # first iteration: initialize date and create event dir
         if not event_date: 
             event_date = date
@@ -168,7 +224,8 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
 
         # update progress, use carriage return to update terminal line
         if progress: sys.stderr.write("{0}/{1}         \r".format(count, total))
-        count += 1
+
+    logging.info("Copied {0} of {1} files with date metadata".format(count, total))
 
 
 
@@ -176,15 +233,15 @@ def photorg_main():
     parser = argparse.ArgumentParser(description='Photo organization')
     parser.add_argument('SOURCE', help='directory to source photos')
     parser.add_argument('DEST', help='output directory for organized directories of photos')
-    parser.add_argument('-v', '--verbose', action='count', help='verbosity level; -v=warn, -vv=info, -vvv=debug')
-    parser.add_argument('--log', type=str, help='logging file')
+    parser.add_argument('-v', '--verbose', action='count', help='verbosity level; -v=warn, -vv=info, -vvv=debug', default=1)
+    parser.add_argument('--logfile', type=str, help='logging file')
+    parser.add_argument('--syslog', action='store_true', help='log to syslog')
     parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events (default 4).')
     parser.add_argument('--hardlink', action='store_true', help='hardlink instead of copy')
     parser.add_argument('--delete', action='store_true', help='delete source file after copy')
     parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
     parser.add_argument('--progress', action='store_true', help='show progress')
     # TODO
-    #parser.add_argument('--mtime-dates', action='store_true', help='Use dates from filesystem modified time')
     #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
     args = parser.parse_args()
    
@@ -200,38 +257,43 @@ def photorg_main():
 
     # set log level on root logger or INFO wont display
     logging.getLogger().setLevel(level)
+    logger = logging.getLogger('photorg')
     
-    if args.log:
-        # errors always go to stderr stream
-        sh = logging.StreamHandler()
-        sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-        sh.setLevel(logging.ERROR)
-        logging.getLogger('').addHandler(sh)
-        
+    # errors always go to stderr stream
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+    sh.setLevel(level)
+    logging.getLogger('').addHandler(sh)
+
+    if args.logfile:
         # verbose messages go to log file
-        fh = logging.FileHandler(args.log)
+        fh = logging.FileHandler(args.logfile)
         fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         fh.setLevel(level)
         logging.getLogger('').addHandler(fh)
-    else:
-        # errors always go to stderr stream
-        sh = logging.StreamHandler()
-        sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-        sh.setLevel(level)
-        logging.getLogger('').addHandler(sh)
-
-    logger = logging.getLogger('photorg')
+    
+    if args.syslog:
+        sysh = logging.handlers.SysLogHandler(address="/dev/log")
+        sysh.setFormatter(logging.Formatter('photorg: [%(levelname)s] %(message)s'))
+        sysh.setLevel(level)
+        logging.getLogger('').addHandler(sysh)
 
     try:
+        logging.info("photorg start")
         # organize and copy files from SOURCE into DEST
         organize_by_event(args.SOURCE, args.DEST, 
                 day_delta=args.gap, 
                 hardlink=args.hardlink, 
                 delete=args.delete, 
                 rename=args.rename, 
-                progress=args.progress) 
+                progress=args.progress)
+        logging.info("photorg done") 
+    
     except Exception as e:
         logger.exception('Unhandled exception')
+        logger.exception(e)
 
 
 
+if __name__ == '__main__':
+    photorg_main()
