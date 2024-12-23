@@ -14,9 +14,19 @@ from subprocess import Popen, PIPE
 from .common import *
 
 
-VIDEO_FILES_EXTENSIONS = ['webm', 'mkv', 'flv', 'vob', 'ogv', 'ogg', 'rrc', 'gifv', 'mng', 'mov', 'avi', 'qt', 'wmv', 
+VIDEO_FILE_EXTENSIONS = ['webm', 'mkv', 'flv', 'vob', 'ogv', 'ogg', 'rrc', 'gifv', 'mng', 'mov', 'avi', 'qt', 'wmv', 
                           'yuv', 'rm', 'asf', 'amv', 'mp4', 'm4p', 'm4v', 'mpg', 'mp2', 'mpeg', 'mpe', 'mpv', 'm4v', 
-                          'svi', '3gp', '3g2', 'mxf', 'roq', 'nsv', 'flv', 'f4v', 'f4p', 'f4a', 'f4b', 'mod']
+                          'svi', '3gp', '3g2', 'mxf', 'roq', 'nsv', 'flv', 'f4v', 'f4p', 'f4a', 'f4b', 'mod', 'mts']
+
+RAW_FILE_EXTENSIONS = ['3fr', 'ari', 'arw', 'bay', 'braw', 'crw', 'cr2', 'cr3', 'cap', 'data', 'dcs', 'dcr', 'dng', 
+                       'drf', 'eip', 'erf', 'fff', 'gpr', 'iiq', 'k25', 'kdc', 'mdc', 'mef', 'mos', 'mrw', 'nef', 
+                       'nrw', 'obm', 'orf', 'pef', 'ptx', 'pxn', 'r3d', 'raf', 'raw', 'rwl', 'rw2', 'rwz', 'sr2', 
+                       'srf', 'srw', 'tif', 'x3f']
+
+IMAGE_FILE_EXTENSIONS = ['jpg', 'jpeg', 'jxl', 'png', 'gif', 'webp', 'tiff', 'heif', 'bmp', 'xcf', 'svg', 'img', 'avif']
+
+PHOTO_FILE_EXTENSIONS = RAW_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS
+
 
 
 def new_event_dir(base, date, date_fmt="%Y/%Y-%m-%d"):
@@ -110,25 +120,29 @@ def ffprobe_json(path):
 
 
 
-def file_is_video(path):
+def file_format(path):
     """check if file extension is a known video file"""
     parts = os.path.splitext(path)
     if len(path) > 1:
         ext = parts[1].lower().strip(".")
-        if ext in VIDEO_FILES_EXTENSIONS:
-            return True
-    return False
+        if ext in VIDEO_FILE_EXTENSIONS:
+            return 'VIDEO'
+        elif ext in PHOTO_FILE_EXTENSIONS:
+            return 'PHOTO'
+    return 'OTHER'
 
 
 
 
 def date_sorted_paths(source_dir):
     """
-    Run exiftool on directory and parse EXIF data JSON output
-    Sort all files that have EXIF data by datetime object
-    return [(date,path)] 
+    Run exiftool on source directory and parse photo EXIF data JSON output. 
+    Walk directory and run ffprobe on video files. Then sort and return [(path,date)].
     """
-    date_path_list = []
+    path_date_dict = {}
+    photo_count = 0
+    video_count = 0
+    other_count = 0
 
     # images 
     try:
@@ -143,13 +157,19 @@ def date_sorted_paths(source_dir):
             # MTS movies from Sony have DateTimeOriginal
             # AVI movies from Olympus cameras have DateTimeOriginal
             path = os.path.realpath(exif['SourceFile'])
-            date_key = 'DateTimeOriginal'
-            if date_key not in exif:
-                logging.warning("{0} not in EXIF for {1}".format(date_key, path))
-                date_key = 'CreateDate'
+            date_str = ''
+            if 'DateTimeOriginal' in exif:
+                date_str = exif['DateTimeOriginal']
+            elif 'CreateDate' in exif:
+                date_str = exif['CreateDate']
+            else:
+                logging.error("EXIF has no CreateDate or DateTimeOriginal for {0}".format(path))
+                continue
 
-            creation_date = datetime.strptime(exif[date_key], '%Y-%m-%d %H:%M:%S')
-            date_path_list.append((creation_date,path))
+            creation_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+            if path not in path_date_dict:
+                path_date_dict[path] = creation_date
+                photo_count += 1
         
         except (KeyError, ValueError) as e:
             logging.error("EXIF {0}: {1}".format(str(e).strip("'"), path))
@@ -157,42 +177,56 @@ def date_sorted_paths(source_dir):
     # videos
     for root, dirs, files in os.walk(source_dir):
         for name in files:
-            if file_is_video(name):
-                path = os.path.join(root,name)
+            format = file_format(name)
+            path = os.path.join(root,name)
+
+            if format == 'VIDEO':
+                video_count += 1
                 creation_date = None
                 try:
                     out = ffprobe_json(path)
                     js = json.loads(out)
                     creation_str = js['format']['tags']['creation_time'] # e.g. 2024-10-27T18:55:15.000000Z
                     creation_date = datetime.strptime(creation_str, '%Y-%m-%dT%H:%M:%S.%fZ')
-                    date_path_list.append((creation_date,path))
+                    if path not in path_date_dict:
+                        path_date_dict[path] = creation_date
                 except Exception as e:
+                    logging.error("Video without metadata: {0}".format(path))
                     logging.error(e)
                 finally:
                     logging.info("ffprobe {0} --> {1}".format(path, str(creation_date)))
+            
+            elif format == 'PHOTO':
+                if path not in path_date_dict:
+                    logging.warning("Photo without metadata: {0}".format(path))
+            else:
+                other_count += 1
 
-    logging.info('{n} files have date metadata'.format(n=len(date_path_list)))
-    return sorted(date_path_list, key=lambda x: x[0])
+    logging.info('{0} files have date metadata'.format(len(path_date_dict)))
+    logging.info('{0} photo and {1} video files were found (total = {2})'.format(photo_count, video_count, photo_count + video_count))
+    logging.info('{0} other files were ignored'.format(other_count))
+    return sorted(path_date_dict.items(), key=lambda x: x[1])
 
 
-    
 
-def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=False, rename=False, progress=False): 
+def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=False, rename=False, progress=False, simulate=False):
     """
     walk files in source_dir and extract CreateDate from EXIF data using Exiftool
     Sort files by date and group into collection with time delta less than 4 days between
     copy files into dest_dir with a new directory for each collection
     """
+    count = 0
     event_date = None
     event_dir = None
     dest = os.path.realpath(dest_dir)
     source = os.path.realpath(source_dir)
-    date_paths = date_sorted_paths(source)
-    count = 0
-    total = len(date_paths)
+    
+    # walk the filesystem, read metadata
+    path_dates = date_sorted_paths(source)
+    total = len(path_dates)
 
     # iterate over (date,path) sorted by date
-    for date,path in date_paths:
+    for path,date in path_dates:
         count += 1
         
         # first iteration: initialize date and create event dir
@@ -242,6 +276,7 @@ def photorg_main():
     parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
     parser.add_argument('--progress', action='store_true', help='show progress')
     # TODO
+    #parser.add_argument('--simulate', action='store_true', help='No action; only perform a simulation of events that would occur')
     #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
     args = parser.parse_args()
    
