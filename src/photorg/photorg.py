@@ -91,13 +91,13 @@ def exiftool_json(path):
     Returns json
     """
     # make sure the preview file doesn't already exist
-    logging.info('Running exiftool')
+    logging.debug('Running exiftool')
     p = Popen(['/usr/bin/exiftool', '-recurse', '-dateFormat', "%Y-%m-%d %H:%M:%S", '-json', path], stdout=PIPE, stderr=PIPE)
     out,err = p.communicate()
     
     if err:
         for msg in err.decode().strip().split('\n'):
-            logging.info("exiftool: " + msg.strip())
+            logging.error("exiftool: " + msg.strip())
     return out
 
 
@@ -143,6 +143,8 @@ def date_sorted_paths(source_dir):
     photo_count = 0
     video_count = 0
     other_count = 0
+    exif_count = 0
+    ffprobe_count = 0
 
     # images 
     try:
@@ -169,7 +171,7 @@ def date_sorted_paths(source_dir):
             creation_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
             if path not in path_date_dict:
                 path_date_dict[path] = creation_date
-                photo_count += 1
+                exif_count += 1
         
         except (KeyError, ValueError) as e:
             logging.error("EXIF {0}: {1}".format(str(e).strip("'"), path))
@@ -190,6 +192,7 @@ def date_sorted_paths(source_dir):
                     creation_date = datetime.strptime(creation_str, '%Y-%m-%dT%H:%M:%S.%fZ')
                     if path not in path_date_dict:
                         path_date_dict[path] = creation_date
+                        ffprobe_count += 1
                 except Exception as e:
                     logging.error("Video without metadata: {0}".format(path))
                     logging.error(e)
@@ -197,14 +200,20 @@ def date_sorted_paths(source_dir):
                     logging.info("ffprobe {0} --> {1}".format(path, str(creation_date)))
             
             elif format == 'PHOTO':
+                photo_count += 1
                 if path not in path_date_dict:
                     logging.warning("Photo without metadata: {0}".format(path))
             else:
                 other_count += 1
 
-    logging.info('{0} files have date metadata'.format(len(path_date_dict)))
-    logging.info('{0} photo and {1} video files were found (total = {2})'.format(photo_count, video_count, photo_count + video_count))
-    logging.info('{0} other files were ignored'.format(other_count))
+
+    logging.info('File statistics: {0} photos, {1} videos, {2} other'.format(photo_count, video_count, other_count))
+    total_media = photo_count + video_count
+    if len(path_date_dict) != total_media:
+        logging.warning("{0} of {1} media files do not have date metadata".format(total_media - len(path_date_dict), total_media))
+    else:
+        logging.info("All {0} media files have date metadata".format(total_media))
+    
     return sorted(path_date_dict.items(), key=lambda x: x[1])
 
 
@@ -243,23 +252,24 @@ def organize_by_event(source_dir, dest_dir, day_delta=4, hardlink=False, delete=
 
         # copy file to event_dir 
         target_path = os.path.join(event_dir, os.path.basename(path))
-        try:
-            copy_file(path, target_path, hardlink=hardlink, delete=delete)
+        if not simulate:
+            try:
+                copy_file(path, target_path, hardlink=hardlink, delete=delete)
 
-        # if there is a collision, choose a different name in the event dir and try again
-        except FileCollisionError as e:
-            if rename:
-                # but first make sure we didn't already do this once
-                if not is_duplicate_file(path, event_dir):
-                    renamed_path = get_unique_filename(target_path)
-                    copy_file(path, renamed_path, hardlink=hardlink, delete=delete)
-            else:
-                logging.error('Error: {0}'.format(str(e)))
+            # if there is a collision, choose a different name in the event dir and try again
+            except FileCollisionError as e:
+                if rename:
+                    # but first make sure we didn't already do this once
+                    if not is_duplicate_file(path, event_dir):
+                        renamed_path = get_unique_filename(target_path)
+                        copy_file(path, renamed_path, hardlink=hardlink, delete=delete)
+                else:
+                    logging.error('Error: {0}'.format(str(e)))
 
-        # update progress, use carriage return to update terminal line
-        if progress: sys.stderr.write("{0}/{1}         \r".format(count, total))
+            # update progress, use carriage return to update terminal line
+            if progress: sys.stderr.write("{0}/{1}         \r".format(count, total))
 
-    logging.info("Copied {0} of {1} files with date metadata".format(count, total))
+            logging.info("Copied {0} of {1} files with date metadata".format(count, total))
 
 
 
@@ -275,20 +285,19 @@ def photorg_main():
     parser.add_argument('--delete', action='store_true', help='delete source file after copy')
     parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
     parser.add_argument('--progress', action='store_true', help='show progress')
+    parser.add_argument('--simulate', action='store_true', help='No action; only perform a simulation of events that would occur')
     # TODO
-    #parser.add_argument('--simulate', action='store_true', help='No action; only perform a simulation of events that would occur')
     #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
     args = parser.parse_args()
    
     # set log level
+    level = logging.ERROR
     if args.verbose == 1:
         level = logging.WARN
     elif args.verbose == 2:
         level = logging.INFO
-    elif args.verbose >= 3:
+    elif args.verbose == 3:
         level = logging.DEBUG
-    else:
-        level = logging.ERROR
 
     # set log level on root logger or INFO wont display
     logging.getLogger().setLevel(level)
@@ -321,7 +330,8 @@ def photorg_main():
                 hardlink=args.hardlink, 
                 delete=args.delete, 
                 rename=args.rename, 
-                progress=args.progress)
+                progress=args.progress,
+                simulate=args.simulate)
         logging.info("photorg done") 
     
     except Exception as e:
