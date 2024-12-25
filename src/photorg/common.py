@@ -8,7 +8,7 @@ import logging
 import hashlib
 from shutil import copyfile
 
-
+logger = logging.getLogger('photorg')
 
 
 def sha1(path, blocksize=4096):
@@ -149,29 +149,29 @@ def copy_file(source, target, hardlink=False, delete=False):
             # create a hardlink on unix
             try:
                 os.link(source, target_path)
-                logging.info("Hardlink: {t} -> {s}".format(s=source, t=target_path))
+                logger.info("Hardlink: {t} -> {s}".format(s=source, t=target_path))
 
             # if link fails, failback to copy
             except OSError as e:
-                logging.warning("Hardlink failed; copying instead")
-                logging.warning("Copying: {s} --> {t}".format(s=source, t=target_path))
+                logger.warning("Hardlink failed; copying instead")
+                #logger.warning("Copying: {s} --> {t}".format(s=source, t=target_path))
                 copyfile(source, target_path)
 
         # copy
         else:
-            logging.info("Copying: {s} --> {t}".format(s=source, t=target_path))
+            logger.info("Copying: {s} --> {t}".format(s=source, t=target_path))
             copyfile(source, target_path)
 
     # file was either copied or target already existed and was identical
     # can delete source, but first verify size just to be safe
     if delete and (os.stat(source).st_size == os.stat(target_path).st_size):
-        logging.info("Deleting: {0}".format(source))
+        logger.info("Deleting: {0}".format(source))
         os.unlink(source)
 
         # check for and remove empty directories
         dirnam = os.path.dirname(source)
         if not os.listdir(dirnam):
-            logging.info("Deleting empty directory: {0}".format(dirnam))
+            logger.info("Deleting empty directory: {0}".format(dirnam))
             os.rmdir(dirnam)
 
         
