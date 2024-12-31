@@ -90,7 +90,6 @@ See also: https://pipx.pypa.io/stable/installation/
 ```
 photorg -h 
 photorg ~/photos/unorganized/ ~/photos/organized/
-photorg --gap 2 --progress --log log.txt unorganized/ organized/
+photorg --gap 2 --syslog --log /tmp/log.txt unorganized/ organized/
 photorg -v /tmp/photos ~/photos
-photorg -vvv -log /tmp/logfile unorganized/ organized/
 ```
