@@ -37,7 +37,7 @@ To prune empty directories
 
 ## Prerequisites (Ubuntu 24.04)
 ```
-sudo apt install python3-full pipx libimage-exiftool-perl python3-build python3-pip
+sudo apt install python3-full pipx libimage-exiftool-perl python3-build python3-pip ffmpeg
 ```
 
 ## Build python packages (sdist and wheel)

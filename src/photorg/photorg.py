@@ -284,16 +284,15 @@ def photorg_main():
     parser.add_argument('SOURCE', help='directory to source photos')
     parser.add_argument('DEST', help='output directory for organized directories of photos')
     parser.add_argument('-v', '--verbose', action='count', help='verbosity level; -v=warn, -vv=info, -vvv=debug', default=0)
+    parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events (default 4).')
     parser.add_argument('--logfile', type=str, help='logging file')
     parser.add_argument('--syslog', action='store_true', help='log to syslog')
-    parser.add_argument('--gap', type=int, default=4, help='The minimum number of days between events (default 4).')
+    parser.add_argument('--quiet', action='store_true', help='Supress STDERR messages; e.g. use when logging to syslog or file')
     parser.add_argument('--hardlink', action='store_true', help='hardlink instead of copy')
     parser.add_argument('--delete', action='store_true', help='delete source file after copy')
     parser.add_argument('--rename', action='store_true', help='Resolve collisions (same path, different content) by renaming file')
     parser.add_argument('--progress', action='store_true', help='show progress')
     parser.add_argument('--simulate', action='store_true', help='No action; only perform a simulation of events that would occur')
-    # TODO
-    #parser.add_argument('--quiet', action='store_true', help='Supress all stderr/stdout messages (use with --log)')
     args = parser.parse_args()
    
     # set log level
@@ -309,10 +308,11 @@ def photorg_main():
     logger.setLevel(level)
     logging.getLogger().setLevel(level)
     
-    # errors always go to stderr stream
-    sh = logging.StreamHandler()
-    sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-    logger.addHandler(sh)
+    # errors always go to stderr stream unless quiet
+    if not args.quiet:
+        sh = logging.StreamHandler()
+        sh.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+        logger.addHandler(sh)
 
     if args.logfile:
         # verbose messages go to log file
